@@ -57,13 +57,27 @@ This skill helps update an existing NA-MIC Project Week project page.
    ```bash
    git push -u origin PW##_YEAR_Location/ProjectName-updates
    ```
-5. Check if PR already exists for this branch:
+5. Check if PR already exists for this branch (open OR closed):
    ```bash
    FORK_OWNER=$(git remote get-url origin | sed 's/.*[:/]\([^/]*\)\/ProjectWeek.*/\1/')
    BRANCH=$(git branch --show-current)
-   gh pr list --repo NA-MIC/ProjectWeek --head "$FORK_OWNER:$BRANCH" --json url
+   # Check for open PR
+   gh pr list --repo NA-MIC/ProjectWeek --head "$FORK_OWNER:$BRANCH" --json url,state
+   # Also check for closed PRs
+   gh pr list --repo NA-MIC/ProjectWeek --head "$FORK_OWNER:$BRANCH" --state closed --json url,state,mergedAt
    ```
-6. Create PR if none exists (IMPORTANT: must use --head flag for fork-based PRs):
+6. Handle existing PRs:
+   - **Open PR exists**: Just show the URL, no need to create a new one
+   - **Merged PR exists**: Inform user the changes are already in master
+   - **Closed (not merged) PR exists**: Create a NEW branch with `-v2` suffix (or increment existing version),
+     push it, and create a fresh PR. This avoids issues with stale branch references:
+     ```bash
+     NEW_BRANCH="${BRANCH}-v2"  # or -v3, etc. if -v2 exists
+     git checkout -b "$NEW_BRANCH"
+     git push -u origin "$NEW_BRANCH"
+     # Then create PR with new branch
+     ```
+8. Create PR if none exists (IMPORTANT: must use --head flag for fork-based PRs):
    ```bash
    gh pr create \
      --repo NA-MIC/ProjectWeek \
@@ -77,7 +91,7 @@ This skill helps update an existing NA-MIC Project Week project page.
    **IMPORTANT:** This is updating an EXISTING project, not adding a new one. The PR title should describe
    what was updated (e.g., "PW44 SlicerCBM: Update progress and add screenshots"), NOT "Add project".
 
-7. Return PR URL to user
+9. Return PR URL to user
 
 ## Finding the project
 
@@ -92,3 +106,29 @@ Search in order:
 - If user wants to abandon changes: `git checkout master` discards uncommitted work
 - Branch naming includes `-updates` suffix to distinguish from new project branches
 - Commit message should summarize what was actually changed (objectives, progress, etc.)
+
+## Handling Closed PRs
+
+If a PR was closed without merging (e.g., due to merge conflicts or reviewer requested changes):
+
+1. **Sync master with upstream first:**
+   ```bash
+   git fetch upstream
+   git checkout master
+   git reset --hard upstream/master
+   ```
+
+2. **Create a fresh branch from updated master:**
+   ```bash
+   git checkout -b PW##_YEAR_Location/ProjectName-updates-v2
+   ```
+
+3. **Cherry-pick or reapply the changes** from the old branch, or if the old branch has the changes:
+   ```bash
+   git cherry-pick <commit-hash>  # for each commit
+   # OR rebase if preferred
+   ```
+
+4. **Push and create new PR** with the fresh branch
+
+This ensures the new PR is based on the latest master and avoids stale reference issues.
